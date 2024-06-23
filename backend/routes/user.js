@@ -1,131 +1,125 @@
 const express = require("express");
-const { User, Account } = require("../db");
+const userRouter = express.Router();
 const zod = require("zod");
 const jwt = require("jsonwebtoken");
+const { User, Account } = require("../db/db");
 const { JWT_SECRET } = require("../config");
-const { authMiddleware } = require("../middleware");
+const { authMiddleware } = require("../middlewares/middleware");
 
-const router = express.Router();
-
-const signupSchema = zod.object({
-  username: zod.string(),
-  password: zod.string().min(5),
+const zodSchema = zod.object({
+  username: zod.string().email(),
+  password: zod.string(),
   firstName: zod.string(),
   lastName: zod.string(),
 });
+const updateBody = zod.object({
+  password: zod.string().optional(),
+  firstName: zod.string().optional(),
+  lastName: zod.string().optional(),
+});
 
-router.post("/signup", async (req, res) => {
-  const userObject = req.body;
-  const response = signupSchema.safeParse(userObject);
+const signInZodSchema = zod.object({
+  username: zod.string().email(),
+  password: zod.string(),
+});
 
-  if (!response.success) {
+userRouter.post("/signup", async (req, res) => {
+  const parsedSchema = zodSchema.safeParse(req.body);
+  if (!parsedSchema.success) {
     return res.status(411).json({
-      message: "Incorrect inputs",
+      message: "Email already taken / Incorrect inputs",
     });
   }
 
   const existingUser = await User.findOne({
-    username: userObject.username,
+    username: req.body.username,
   });
 
-  if (existingUser)
-    res.status(411).json({
-      message: "Email already taken",
+  if (existingUser) {
+    return res.status(411).json({
+      message: "Email already taken / Incorrect inputs",
     });
+  }
 
   const user = await User.create({
-    username: userObject.username,
-    password: userObject.password,
-    firstName: userObject.firstName,
-    lastName: userObject.lastName,
+    username: req.body.username,
+    password: req.body.password,
+    firstName: req.body.firstName,
+    lastName: req.body.lastName,
   });
 
   const userId = user._id;
 
   await Account.create({
     userId,
-    balance: 1 + Math.random() * 10000,
+    balance: Math.random() * 10000 + 1,
   });
 
   const token = jwt.sign({ userId }, JWT_SECRET);
 
-  res.json({
+  res.status(200).json({
     message: "User created successfully",
-    token: token,
+    token,
   });
 });
 
-const signinSchema = zod.object({
-  username: zod.string(),
-  password: zod.string().min(5)
-});
-
-router.post("/signin", async (req, res) => {
-  const userObject = req.body;
-  const response = signinSchema.safeParse(userObject);
-
-  if (!response.success) {
-    res.status(411).json({
-      msg: "Incorrect inputs",
-    });
-  }
-
-  const user = await User.findOne({
-    username: userObject.username,
-    password: userObject.password,
-  });
-
-  if (user) {
-    const userId = user._id;
-
-    const token = jwt.sign({ userId }, JWT_SECRET);
-
-    res.json({
-      token: token,
-    });
-  } else {
-    res.status(411).json({
+userRouter.post("/signin", async (req, res) => {
+  const parsedSchema = signInZodSchema.safeParse(req.body);
+  if (!parsedSchema.success) {
+    return res.status(411).json({
       message: "Error while logging in",
     });
   }
+
+  const existingUser = await User.findOne({
+    username: req.body.username,
+    password: req.body.password,
+  });
+
+
+  if (existingUser) {
+    const token = jwt.sign({ userId: existingUser._id }, JWT_SECRET);
+    const urll = `http://localhost:5173/sendmoney?id=${existingUser._id}&firstName=${existingUser.firstName}&lastName=${existingUser.lastName}`;
+    
+    return res.status(200).json({
+      token,
+      urll,
+    });
+  }
+
+  res.status(411).json({
+    message: "Error while logging in",
+  });
 });
 
-const updateBody = zod.object({
-  password: zod.string().min(5).optional(),
-  firstName: zod.string().optional(),
-  lastName: zod.string().optional(),
-});
-
-router.put("/", authMiddleware, async (req, res) => {
-  const { success } = updateBody.safeParse(req.body);
-  if (!success) {
+userRouter.put("/", authMiddleware, async (req, res) => {
+  const parsedSchema = updateBody.safeParse(req.body);
+  if (!parsedSchema.success) {
     res.status(411).json({
       message: "Error while updating information",
     });
   }
 
-  await User.updateOne(
-    {
-      _id: req.userId,
-    },
-    req.body
-  );
-
+  await User.updateOne({ id: req.userId }, { $set: req.body });
   res.json({
     message: "Updated successfully",
   });
 });
 
-router.get("/bulk", async (req, res) => {
-  const filter = req.query.filter || "";
+userRouter.get("/bulk", async (req, res) => {
+  const name = req.query.filter || "";
 
   const users = await User.find({
     $or: [
       {
-        firstName: { $regex: filter },
+        firstName: {
+          $regex: name,
+        },
       },
       {
-        lastName: { $regex: filter },
+        lastName: {
+          $regex: name,
+        },
       },
     ],
   });
@@ -140,4 +134,6 @@ router.get("/bulk", async (req, res) => {
   });
 });
 
-module.exports = router;
+module.exports = {
+  userRouter,
+};

@@ -1,12 +1,11 @@
 const express = require("express");
-const rootRouter = require("./routes/index");
-
+const { router } = require("./routes");
 const cors = require("cors");
-
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
-app.use("/api/v1", rootRouter);
+app.use("/api/v1", router);
 
-app.listen(3000);
+app.listen(5000);
