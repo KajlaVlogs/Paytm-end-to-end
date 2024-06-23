@@ -4,7 +4,7 @@ const { Schema } = require("zod");
 const mongoConnection = async () => {
   try {
     await mongoose.connect(
-      "mongodb+srv://iamgreatalien:vinaykajla@vinaykajla.krvo7fj.mongodb.net/paytm"
+      "PASTE URL HERE"
     );
     console.log("Mongo connection established");
   } catch (error) {
